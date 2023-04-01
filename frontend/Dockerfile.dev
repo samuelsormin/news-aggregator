@@ -1,0 +1,23 @@
+# Set Node version
+FROM node:19-alpine AS development
+
+# Set env
+ENV NODE_ENV development
+
+#Set working directory
+WORKDIR /var/www
+
+# Copy package*.json to container
+COPY package*.json .
+
+# Install dependecies
+RUN npm install
+
+# Copy app files to container
+COPY . .
+
+# Expose port
+EXPOSE 3000
+
+# Start the app
+CMD ["npm", "start"]
