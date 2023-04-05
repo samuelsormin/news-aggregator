@@ -13,10 +13,11 @@ services:
     working_dir: /var/www
     volumes:
       - ./backend:/var/www
+      - ./backend/docker/supervisorctl:/etc/supervisor/conf.d
       - ./backend/docker/php/core.ini:/usr/local/etc/php/conf.d/core.ini
     networks:
       - news-aggregator_network
-  
+
   app-fe:
     build:
       context: ./frontend
@@ -71,6 +72,16 @@ services:
       ADMINER_DEFAULT_SERVER: news-aggregator_mysql
     ports:
       - 8001:8080
+    networks:
+      - news-aggregator_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: news-aggregator_redis
+    restart: unless-stopped
+    tty: true
+    volumes:
+      - ./redis/data:/data
     networks:
       - news-aggregator_network
 
