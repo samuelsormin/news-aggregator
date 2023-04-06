@@ -37,49 +37,59 @@ class SaveNewsApiArticle implements ShouldQueue
      */
     public function handle(): void
     {
-        // Save authors, sources & articles to db
-        try {
-            DB::beginTransaction();
+        if (
+            !empty($this->article->title)
+            && !empty($this->article->description)
+            && !empty($this->article->url)
+            && !empty($this->article->urlToImage)
+            && !empty($this->article->publishedAt)
+            && !empty($this->article->author)
+            && !empty($this->article->source->name)
+        ) {
+            // Save authors, sources & articles to db
+            try {
+                DB::beginTransaction();
 
-            $author = Author::where('name', $this->article->author)->first();
-            $source = Source::where('name', $this->article->source->name)->first();
+                $author = Author::where('name', $this->article->author)->first();
+                $source = Source::where('name', $this->article->source->name)->first();
 
-            // Create author if it doesn't exist
-            if (empty($author)) {
-                $author = Author::create([
-                    'name' => $this->article->author
+                // Create author if it doesn't exist
+                if (empty($author)) {
+                    $author = Author::create([
+                        'name' => $this->article->author
+                    ]);
+                }
+
+                // Create source if it doesn't exist
+                if (empty($source)) {
+                    $source = Source::create([
+                        'name' => $this->article->source->name
+                    ]);
+                }
+
+                $data = [
+                    'title' => $this->article->title,
+                    'description' => $this->article->description,
+                    'url' => $this->article->url,
+                    'thumbnail' => $this->article->urlToImage,
+                    'published_at' => date('Y-m-d H:i:s', strtotime($this->article->publishedAt)),
+                    'author_id' => $author->id,
+                    'category_id' => $this->categoryId,
+                    'source_id' => $source->id,
+                ];
+
+                Article::create($data);
+
+                DB::commit();
+                //
+            } catch (\Throwable $th) {
+                DB::rollBack();
+
+                Log::error('Create article failed.', [
+                    'message' => $th->getMessage(),
+                    'trace' => $th->getTraceAsString()
                 ]);
             }
-
-            // Create source if it doesn't exist
-            if (empty($source)) {
-                $source = Source::create([
-                    'name' => $this->article->source->name
-                ]);
-            }
-
-            $data = [
-                'title' => $this->article->title,
-                'description' => $this->article->description,
-                'url' => $this->article->url,
-                'thumbnail' => $this->article->urlToImage,
-                'published_at' => date('Y-m-d H:i:s', strtotime($this->article->publishedAt)),
-                'author_id' => $author->id,
-                'category_id' => $this->categoryId,
-                'source_id' => $source->id,
-            ];
-
-            Article::create($data);
-
-            DB::commit();
-            //
-        } catch (\Throwable $th) {
-            DB::rollBack();
-
-            Log::error('Create article failed.', [
-                'message' => $th->getMessage(),
-                'trace' => $th->getTraceAsString()
-            ]);
         }
     }
 }
