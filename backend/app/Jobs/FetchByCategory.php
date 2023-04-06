@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Helpers\NewsApi;
+use App\Helpers\NYTimesApi;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -15,20 +16,20 @@ class FetchByCategory implements ShouldQueue
 
     protected $category;
     protected $latestDate;
-    protected $sourceId;
+    protected $source;
 
     /**
      * Create a new job instance.
      * 
      * @param object $category
      * @param string $latestDate
-     * @param integer $sourceId
+     * @param integer $source
      */
-    public function __construct($category, $latestDate, $sourceId)
+    public function __construct($category, $latestDate, $source)
     {
         $this->category = $category;
         $this->latestDate = $latestDate;
-        $this->sourceId = $sourceId;
+        $this->source = $source;
     }
 
     /**
@@ -36,22 +37,35 @@ class FetchByCategory implements ShouldQueue
      */
     public function handle(): void
     {
-        $from = empty($this->latestDate) ? "" : "&from={$this->latestDate}";
+        switch ($this->source) {
+            case env('NEWSAPI_SOURCE'):
+                $from = empty($this->latestDate) ? "" : "&from={$this->latestDate}";
+                $articles = NewsApi::request("everything?excludeDomains=theguardian.com&q={$this->category->name}{$from}&pageSize=10");
 
-        // fetch article from the latest date if $latestDate doesn't empty
-        switch ($this->sourceId) {
-            case env('NEWSAPI_SOURCEID'):
-                $articles = NewsApi::request("everything?q={$this->category->name}{$from}&pageSize=10");
+                if (!empty($articles)) {
+                    foreach ($articles->articles as $article) {
+                        dispatch(new SaveNewsApiArticle($article, $this->category->id))->onQueue('saveNewsApiArticle');
+                    }
+                }
+                break;
+
+            case env('NYTIMES_SOURCE'):
+                $articles = NYTimesApi::request("articlesearch.json?q={$this->category->name}&sort=newest");
+                $latestDate = empty($this->latestDate) ? '1900-01-01 00:00:01' : $this->latestDate;
+
+                if (!empty($articles->response)) {
+                    foreach ($articles->response->docs as $article) {
+                        // invoke job to save NYTimes's article
+                        if (strtotime($article->pub_date) > strtotime($latestDate)) {
+                            dispatch(new SaveNYTimesArticle($article, $this->category->id, $this->latestDate))->onQueue('saveNYTimesArticle');
+                        }
+                    }
+                }
                 break;
 
             default:
                 $articles = [];
                 break;
-        }
-
-        foreach ($articles->articles as $article) {
-            // invoke job to save NewsApi's article
-            if ($this->sourceId == env('NEWSAPI_SOURCEID')) dispatch(new SaveNewsApiArticle($article, $this->category->id))->onQueue('saveNewsApiArticle');
         }
     }
 };
