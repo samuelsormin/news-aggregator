@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Helpers\NewsApi;
 use App\Helpers\NYTimesApi;
+use App\Helpers\TheGuardianApi;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -63,8 +64,18 @@ class FetchByCategory implements ShouldQueue
                 }
                 break;
 
-            default:
-                $articles = [];
+            case env('THEGUARDIAN_SOURCE'):
+                $articles = TheGuardianApi::request("search?q={$this->category->name}&show-fields=trailText,thumbnail,byline&order-by=newest");
+                $latestDate = empty($this->latestDate) ? '1900-01-01 00:00:01' : $this->latestDate;
+
+                if (!empty($articles->response)) {
+                    foreach ($articles->response->results as $article) {
+                        // invoke job to save The Guardian's article
+                        if (strtotime($article->webPublicationDate) > strtotime($latestDate)) {
+                            dispatch(new SaveTheGuardianArticle($article, $this->category->id, $this->latestDate))->onQueue('saveTheGuardianArticle');
+                        }
+                    }
+                }
                 break;
         }
     }
